@@ -1,0 +1,25 @@
+name: Lint workflows
+
+# A malformed workflow does not fail loudly -- GitHub reports "workflow file
+# issue" with no log, and a publish pipeline that never parses looks exactly
+# like one that was never triggered. Catch it here instead.
+
+on:
+  push:
+    paths: ['.github/workflows/**']
+  pull_request:
+    paths: ['.github/workflows/**']
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Parse every workflow
+        run: |
+          set -euo pipefail
+          for f in .github/workflows/*.yml; do
+            python3 -c "import yaml,sys; yaml.safe_load(open('$f'))" \
+              && echo "ok   $f" \
+              || { echo "FAIL $f"; exit 1; }
+          done

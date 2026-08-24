@@ -57,7 +57,8 @@ jobs:
 
       - name: Resolve the runtime this build carries
         id: rt
-        run: echo "version=$(grep -oP "releaseVersion: '\K[^']+" src/wasm-info.js)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "version=$(grep -oP "releaseVersion: '\K[^']+" src/wasm-info.js)" >> "$GITHUB_OUTPUT"
 
       - name: Pack (dry run)
         if: github.event.inputs.dry_run == 'true'
