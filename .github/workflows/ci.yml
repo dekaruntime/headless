@@ -41,12 +41,16 @@ jobs:
       - name: Verify the universal entry stays Worker-safe
         run: |
           set -euo pipefail
-          if grep -nE "^\s*import .*['\"]node:" src/index.js src/compiler.js; then
-            echo "src/index.js and src/compiler.js must not import node: builtins at module scope."
-            echo "Node-only code belongs in src/node.js."
+          # Any mention, not just a top-level import. A dynamic
+          # `await import('node:fs')` inside a function body is resolved
+          # statically by esbuild, so it still drags a Node shim into a Worker
+          # bundle -- which is exactly how this slipped through the first time.
+          if grep -vE "^\s*(//|\*|/\*)" src/index.js src/compiler.js | grep -nE "['\"]node:"; then
+            echo "src/index.js and src/compiler.js must not reference node: builtins at all,"
+            echo "including inside a function. Node-only code belongs in src/node.js."
             exit 1
           fi
-          echo "ok: no top-level node: imports"
+          echo "ok: no node: references in the universal entry"
 
       - name: Verify the package publishes the files it claims
         run: |

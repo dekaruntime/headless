@@ -16,10 +16,26 @@
 // fixtures do not have that gap.
 
 import vm from 'node:vm';
-import { load } from './index.js';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { instantiate } from './compiler.js';
 import { createRuntimeGlobals } from '../vendor/runtime-globals.mjs';
 
 const DEFAULT_TIMEOUT_MS = 10_000;
+
+/**
+ * Instantiate the compiler bundled with this package.
+ *
+ * Lives here rather than in the universal entry because it reads the wasm off
+ * disk, and a bundler resolves that import even when it sits inside a function.
+ *
+ * The instance is stateless between calls and safe to reuse for the life of the
+ * process. Callers should: instantiating a 6.6MB module is not free.
+ */
+export async function load() {
+  const path = fileURLToPath(new URL('../wasm/deka_compiler.wasm', import.meta.url));
+  return instantiate(await readFile(path));
+}
 
 /**
  * Strip module-level syntax that cannot be evaluated inside a vm script.
@@ -123,4 +139,4 @@ export async function check(source, opts = {}) {
   };
 }
 
-export { load, instantiate, Compiler, bundledWasmInfo, wasmVersion, wasmSourceCommit } from './index.js';
+export { instantiate, Compiler, bundledWasmInfo, wasmVersion, wasmSourceCommit } from './index.js';

@@ -9,7 +9,7 @@ npm i @dekaruntime/headless
 ```
 
 ```js
-import { load } from '@dekaruntime/headless';
+import { load } from '@dekaruntime/headless/node';
 
 const deka = await load();
 const { ok, js, stderr } = deka.compile('fn add(a: number, b: number) number { return a + b; }');
@@ -51,9 +51,12 @@ anything. `check()` returns `contributed: false` for that case.
 
 ## API
 
-### `load()` → `Promise<Compiler>`
+### `load()` → `Promise<Compiler>` — Node only
 
-Instantiates the bundled compiler. Node only — it reads the wasm off disk.
+Instantiates the bundled compiler by reading the wasm off disk. Exported from
+`@dekaruntime/headless/node`, not the universal entry: bundlers resolve a
+`node:` import even inside a function body, so keeping it out of the root entry
+is what makes that entry genuinely Worker-safe.
 Instances are stateless between calls and meant to be reused; instantiating a
 6.6MB module per call will dominate everything else you do.
 
@@ -81,11 +84,28 @@ prelude.
 ## Cloudflare Workers
 
 The artifact is a bare `wasm32-unknown-unknown` module with **zero imports**, so
-it needs no glue. Workers import wasm at build time rather than compiling bytes
-at runtime:
+it needs no glue. It runs in a Worker — verified against `workerd` over real
+HTTP, not just bundled.
+
+One wrinkle, and it is not optional: **Wrangler's module rules do not apply to
+files inside `node_modules`.** Importing `@dekaruntime/headless/wasm` directly
+fails with `No loader is configured for ".wasm" files`, and no `globs` pattern
+fixes it — `node_modules/**/*.wasm`, `**/node_modules/**/*.wasm` and
+`fallthrough = true` were all tried. Copy the wasm into your own source tree:
+
+```json
+{ "scripts": { "prebuild": "cp node_modules/@dekaruntime/headless/wasm/deka_compiler.wasm src/" } }
+```
+
+```toml
+# wrangler.toml
+[[rules]]
+type = "CompiledWasm"
+globs = ["**/*.wasm"]
+```
 
 ```js
-import wasm from '@dekaruntime/headless/wasm';
+import wasm from './deka_compiler.wasm';
 import { instantiate } from '@dekaruntime/headless';
 
 let compiler;
@@ -98,9 +118,10 @@ export default {
 };
 ```
 
-`run()` is not available here — executing compiled output needs a JS host, and
-Workers do not allow dynamic evaluation. A Worker can answer "is this
-well-formed"; it cannot answer "is this real". Do that in CI.
+`run()` is not available here — executing compiled output needs a JS host. A
+Worker can answer "is this well-formed"; it cannot answer "is this real". The
+difference is not academic: a Worker returns `ok: true` for
+`fn main() { totallyMadeUp(); }`. Do that check in CI.
 
 ## Which compiler is in here
 

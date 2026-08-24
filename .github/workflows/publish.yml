@@ -27,6 +27,11 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # npm trusted publishing (OIDC). The environment name must match the one
+    # configured on the package at npmjs.com -- if it does not, the OIDC token's
+    # audience will not match and the publish is rejected as unauthorised, which
+    # reads like a permissions bug rather than a name typo.
+    environment: headless
     steps:
       - uses: actions/checkout@v5
 
@@ -34,6 +39,14 @@ jobs:
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing needs npm >= 11.5.1. The npm bundled with Node 22 is
+      # older, and an older client silently falls back to looking for a token --
+      # which then fails with EOTP or ENEEDAUTH instead of naming the real cause.
+      - name: Upgrade npm for OIDC support
+        run: |
+          npm install -g npm@latest
+          npm --version
 
       - name: Test
         run: node --test test/*.test.mjs
@@ -66,11 +79,13 @@ jobs:
           npm pack --dry-run
           echo "Would publish under dist-tags: latest, deka-${{ steps.rt.outputs.version }}"
 
+      # No NODE_AUTH_TOKEN. Authentication is the OIDC token minted by GitHub for
+      # this workflow in this environment, exchanged by npm for a short-lived
+      # credential. Nothing long-lived is stored anywhere, which is the point:
+      # npm is phasing out tokens that bypass 2FA.
       - name: Publish
         if: github.event.inputs.dry_run != 'true'
-        run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
 
       # The mapping from package version to the runtime it compiles for. This is
       # what makes `npm i @dekaruntime/headless@deka-0.29.0` resolve, so a
@@ -82,5 +97,3 @@ jobs:
           pkg=$(node -p "require('./package.json').version")
           npm dist-tag add "@dekaruntime/headless@${pkg}" "deka-${{ steps.rt.outputs.version }}"
           npm dist-tag ls @dekaruntime/headless
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

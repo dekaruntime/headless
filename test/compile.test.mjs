@@ -8,7 +8,7 @@
 
 import assert from 'node:assert/strict';
 import { test, before } from 'node:test';
-import { load } from '../src/index.js';
+import { load } from '../src/node.js';
 import { bundledWasmInfo } from '../src/wasm-info.js';
 
 let deka;
