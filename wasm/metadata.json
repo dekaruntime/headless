@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "artifact": "deka_compiler.wasm",
-  "sha256": "c64cbd7ddd4d62a5ac9d813864bee35e2f823c115f63955aceaf12475bac5d3b",
-  "source_commit": "61b366bbf69f63553235cac1a85c405f6115e684",
+  "sha256": "025f3c866155e41444d295fd5dfd47994bc6a439a3ca88ee18fb5a4438ae6770",
+  "source_commit": "0bafee178d1be6faf6eb72d54ff3a69ac8000b82",
   "target": "wasm32-unknown-unknown",
-  "cargo_lock_sha256": "361921d77712b47fb07849063ce793d2823ebea23bed40ef2308d4f192114de9",
+  "cargo_lock_sha256": "f0ccb8688edf25d3bc737ee162e8c7b48dc4fc216b1c92fdaf5271ebfbec6604",
   "compiler": {
     "name": "deka-browser-compiler",
-    "version": "0.29.0",
+    "version": "0.30.0",
     "abi_version": 1
   }
 }
