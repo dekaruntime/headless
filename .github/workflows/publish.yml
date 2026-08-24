@@ -83,17 +83,22 @@ jobs:
       # this workflow in this environment, exchanged by npm for a short-lived
       # credential. Nothing long-lived is stored anywhere, which is the point:
       # npm is phasing out tokens that bypass 2FA.
-      - name: Publish
-        if: github.event.inputs.dry_run != 'true'
-        run: npm publish --access public
-
-      # The mapping from package version to the runtime it compiles for. This is
-      # what makes `npm i @dekaruntime/headless@deka-0.29.0` resolve, so a
-      # consumer can pin the compiler rather than the wrapper.
-      - name: Tag the runtime version
+      #
+      # The dist-tag runs in THIS step, not a later one. The OIDC credential is
+      # scoped to the publish invocation; a separate `run:` block gets E401
+      # "authentication token seems to be invalid", which reads like a bad token
+      # rather than an expired session.
+      - name: Publish and tag the runtime version
         if: github.event.inputs.dry_run != 'true'
         run: |
           set -euo pipefail
+          npm publish --access public
           pkg=$(node -p "require('./package.json').version")
-          npm dist-tag add "@dekaruntime/headless@${pkg}" "deka-${{ steps.rt.outputs.version }}"
-          npm dist-tag ls @dekaruntime/headless
+          rt="${{ steps.rt.outputs.version }}"
+          if npm dist-tag add "@dekaruntime/headless@${pkg}" "deka-${rt}"; then
+            npm dist-tag ls @dekaruntime/headless
+          else
+            echo "::warning::Published ${pkg}, but could not set dist-tag deka-${rt}."
+            echo "::warning::The OIDC credential does not cover dist-tag operations."
+            echo "::warning::Set it manually: npm dist-tag add @dekaruntime/headless@${pkg} deka-${rt}"
+          fi
