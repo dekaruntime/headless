@@ -1,0 +1,134 @@
+name: Sync compiler wasm
+
+# Stage two of the release cascade:
+#
+#   deka release  ->  wasm published  ->  THIS  ->  headless published
+#                                                     ->  ai worker deployed
+#                                                     ->  blog draft opened
+#
+# Three ways in, on purpose:
+#
+#   repository_dispatch  the fast path. deka's release workflow pokes us the
+#                        moment a release finishes.
+#   schedule             the backstop. If the dispatch never fires -- token
+#                        expired, workflow edited, release published by hand --
+#                        this still catches up within the hour. A cascade whose
+#                        only trigger is a push is a cascade that silently stops.
+#   workflow_dispatch    the manual override, for pinning a specific version.
+#
+# Every path is idempotent: if the package already carries the target version,
+# the job does nothing and succeeds. Re-running is always safe.
+
+on:
+  repository_dispatch:
+    types: [runtime-released]
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Runtime version to pin (blank = latest release)'
+        required: false
+      allow_version_mismatch:
+        description: 'Pin even if the artifact disagrees with its manifest (deka#279)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: sync-wasm
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Resolve target version
+        id: target
+        run: |
+          set -euo pipefail
+          v="${{ github.event.inputs.version || github.event.client_payload.version || '' }}"
+          if [ -z "$v" ]; then
+            v=$(curl -sf https://releases.deka.gg/latest.json | jq -r .version)
+          fi
+          v="${v#v}"
+          [ -n "$v" ] && [ "$v" != "null" ] || { echo "could not resolve a target version"; exit 1; }
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Target: $v"
+
+      # Idempotency gate. The dispatch, the cron, and a manual run can all fire
+      # for the same release; only the first does work.
+      - name: Already on this version?
+        id: check
+        run: |
+          set -euo pipefail
+          current=$(grep -oP "releaseVersion: '\K[^']+" src/wasm-info.js || echo none)
+          echo "Current: $current"
+          if [ "$current" = "${{ steps.target.outputs.version }}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Already pinned. Nothing to do."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sync
+        if: steps.check.outputs.skip == 'false'
+        id: sync
+        run: |
+          set +e
+          flags=""
+          if [ "${{ github.event.inputs.allow_version_mismatch }}" = "true" ]; then
+            flags="--allow-version-mismatch"
+          fi
+          node scripts/sync-wasm.mjs "${{ steps.target.outputs.version }}" $flags
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      # Exit 2 means the release is tagged but its artifacts are not up yet.
+      # That is a normal race between two pipelines, not a failure -- the cron
+      # will pick it up. Failing here would page us for something that fixes
+      # itself, and alarms that cry wolf get muted.
+      - name: Interpret the result
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          case "${{ steps.sync.outputs.code }}" in
+            0) echo "synced" ;;
+            2) echo "::notice::v${{ steps.target.outputs.version }} is not fully published yet. The hourly run will retry."
+               exit 0 ;;
+            3) echo "::error::Bad artifact for v${{ steps.target.outputs.version }} -- see the log. Not pinning it."
+               exit 1 ;;
+            *) echo "::error::sync-wasm.mjs failed with ${{ steps.sync.outputs.code }}"
+               exit 1 ;;
+          esac
+
+      - name: Test against the new compiler
+        if: steps.sync.outputs.code == '0'
+        run: node --test test/*.test.mjs
+
+      # A version bump is what makes stage three fire. Package semver is
+      # independent of the runtime's (a wrapper fix needs somewhere to go); the
+      # runtime it carries is recorded in the dist-tag at publish time.
+      - name: Commit and tag
+        if: steps.sync.outputs.code == '0'
+        run: |
+          set -euo pipefail
+          git config user.name  "deka-bot"
+          git config user.email "bot@deka.gg"
+          npm version patch --no-git-tag-version
+          pkg=$(node -p "require('./package.json').version")
+          git add -A
+          git commit -m "chore: pin deka ${{ steps.target.outputs.version }} compiler
+
+          -(wasm): sync deka_compiler.wasm from the v${{ steps.target.outputs.version }} release
+          -(pkg): ${pkg}, published under dist-tag deka-${{ steps.target.outputs.version }}"
+          git tag "v${pkg}"
+          git push origin main --tags

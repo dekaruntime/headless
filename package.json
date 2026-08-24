@@ -1,0 +1,37 @@
+{
+  "name": "@dekaruntime/headless",
+  "version": "0.1.0",
+  "description": "Headless wasm-only deka compiler. Compile and run DekaScript from Node, browsers, and Cloudflare Workers.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dekaruntime/headless.git"
+  },
+  "homepage": "https://github.com/dekaruntime/headless#readme",
+  "bugs": "https://github.com/dekaruntime/headless/issues",
+  "keywords": ["deka", "dekascript", "wasm", "compiler"],
+  "exports": {
+    ".": "./src/index.js",
+    "./node": "./src/node.js",
+    "./wasm": "./wasm/deka_compiler.wasm",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src/",
+    "vendor/",
+    "wasm/deka_compiler.wasm",
+    "wasm/metadata.json",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "sync-wasm": "node scripts/sync-wasm.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Test
+        run: node --test test/*.test.mjs
+
+      # The generated pin must match the bytes actually committed. Without this,
+      # a hand-edited wasm-info.js or a wasm swapped in without re-running sync
+      # would let the package lie about which compiler it carries -- which is
+      # the one thing this package exists to be trusted about.
+      - name: Verify the committed wasm matches its pin
+        run: |
+          set -euo pipefail
+          pinned=$(grep -oP "sha256: '\K[0-9a-f]{64}" src/wasm-info.js)
+          actual=$(sha256sum wasm/deka_compiler.wasm | cut -d' ' -f1)
+          if [ "$pinned" != "$actual" ]; then
+            echo "wasm-info.js pins $pinned"
+            echo "wasm/deka_compiler.wasm is $actual"
+            echo "Re-run: node scripts/sync-wasm.mjs <version>"
+            exit 1
+          fi
+          echo "ok: $actual"
+
+      # The package advertises Worker compatibility. A stray `node:` import at
+      # module scope in the universal entry would break that, and no unit test
+      # here would notice -- Node has everything.
+      - name: Verify the universal entry stays Worker-safe
+        run: |
+          set -euo pipefail
+          if grep -nE "^\s*import .*['\"]node:" src/index.js src/compiler.js; then
+            echo "src/index.js and src/compiler.js must not import node: builtins at module scope."
+            echo "Node-only code belongs in src/node.js."
+            exit 1
+          fi
+          echo "ok: no top-level node: imports"
+
+      - name: Verify the package publishes the files it claims
+        run: |
+          set -euo pipefail
+          npm pack --dry-run --json > /tmp/pack.json
+          for f in wasm/deka_compiler.wasm src/index.js src/compiler.js src/node.js src/wasm-info.js vendor/runtime-globals.mjs; do
+            grep -q "\"$f\"" /tmp/pack.json || { echo "missing from tarball: $f"; exit 1; }
+          done
+          echo "ok: tarball contents verified"

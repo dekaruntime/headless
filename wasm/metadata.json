@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "artifact": "deka_compiler.wasm",
+  "sha256": "e6645790da3c8e3e0e15e3d9811474722e12a535a9ad03607473a88e520da153",
+  "source_commit": "b5db340337164fd52dbc7689284863490c9484d1",
+  "target": "wasm32-unknown-unknown",
+  "cargo_lock_sha256": "1194cee6ddff01942cdec22c6be9b445cfe804d8880fc8c702fe4db35245dcbb",
+  "compiler": {
+    "name": "deka-browser-compiler",
+    "version": "0.28.0",
+    "abi_version": 1
+  }
+}
