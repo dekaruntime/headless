@@ -107,7 +107,54 @@ if (embedded?.version && meta.compiler?.version && embedded.version !== meta.com
 await writeFile(wasmPath, bytes);
 await writeFile(metaPath, JSON.stringify(meta, null, 2) + '\n');
 await writeFile(infoPath, renderInfo({ version, meta, embedded, sha256 }));
-console.log(`\nsynced -> wasm/deka_compiler.wasm, src/wasm-info.js`);
+await updateReadmeTable(version, embedded?.version);
+console.log(`\nsynced -> wasm/deka_compiler.wasm, src/wasm-info.js, README.md`);
+
+/**
+ * Keep the package-version -> runtime-version table in the README current.
+ *
+ * This exists because npm trusted publishing cannot set dist-tags: the OIDC
+ * credential is scoped to `npm publish`, so `@deka-0.29.0` style pinning is not
+ * available without storing a long-lived token. The table is generated in the
+ * same commit that bumps the pin, so it cannot drift from the bytes.
+ */
+async function updateReadmeTable(releaseVersion, embeddedVersion) {
+  const readmePath = fileURLToPath(new URL('README.md', root));
+  const pkgPath = fileURLToPath(new URL('package.json', root));
+  let readme, pkg;
+  try {
+    readme = await readFile(readmePath, 'utf8');
+    pkg = JSON.parse(await readFile(pkgPath, 'utf8'));
+  } catch {
+    return;
+  }
+
+  const START = '<!-- runtime-map:start -->';
+  const END = '<!-- runtime-map:end -->';
+  const a = readme.indexOf(START);
+  const b = readme.indexOf(END);
+  if (a === -1 || b === -1) return;
+
+  // The version published from this commit is the current one bumped by the
+  // release job; record the pin against it.
+  const rows = [];
+  const existing = readme.slice(a + START.length, b);
+  for (const line of existing.split('\n')) {
+    const m = line.match(/^\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|/);
+    if (m && m[2] !== releaseVersion) rows.push([m[1], m[2], null]);
+  }
+  rows.unshift([`>=${pkg.version}`, releaseVersion, embeddedVersion]);
+
+  const table = [
+    '',
+    '| package | deka runtime | artifact self-reports |',
+    '|---|---|---|',
+    ...rows.map(([p, r, e]) => `| \`${p}\` | \`${r}\` | ${e ? `\`${e}\`` : '—'} |`),
+    '',
+  ].join('\n');
+
+  await writeFile(readmePath, readme.slice(0, a + START.length) + table + readme.slice(b));
+}
 
 async function currentVersion() {
   try {
