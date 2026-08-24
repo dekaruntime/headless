@@ -140,7 +140,8 @@ unambiguously and are the fields to pin against.
 <!-- runtime-map:start -->
 | package | deka runtime | artifact self-reports |
 |---|---|---|
-| `>=0.1.4` | `0.30.0` | `0.30.0` |
+| `>=0.1.7` | `0.31.1` | `0.31.1` |
+| `>=0.1.4` | `0.30.0` | — |
 | `>=0.1.3` | `0.29.0` | — |
 | `>=0.1.3` | `0.28.0` | — |
 <!-- runtime-map:end -->
