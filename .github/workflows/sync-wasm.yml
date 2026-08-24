@@ -45,7 +45,16 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
+      # Checked out with a PAT, not the default GITHUB_TOKEN, and this is load
+      # bearing: GitHub refuses to start a workflow from a push made with
+      # GITHUB_TOKEN, to stop workflows triggering themselves forever. The tag
+      # pushed below is meant to fire publish.yml, so under the default token
+      # this job tagged into a void -- v0.1.4, v0.1.5 and v0.1.6 were all
+      # created and none of them ever published. Nothing failed; the cascade
+      # just silently stopped one link in.
       - uses: actions/checkout@v5
+        with:
+          token: ${{ secrets.CASCADE_DISPATCH_TOKEN }}
 
       - uses: actions/setup-node@v4
         with:
@@ -132,3 +141,25 @@ jobs:
           -(pkg): ${pkg}, published under dist-tag deka-${{ steps.target.outputs.version }}"
           git tag "v${pkg}"
           git push origin main --tags
+          echo "::notice::Tagged v${pkg} carrying deka ${{ steps.target.outputs.version }}. publish.yml should now run."
+
+      # A tag that never publishes is the failure this job had for three
+      # releases without going red. Fail loudly instead of trusting the trigger.
+      - name: Confirm the publish actually fired
+        if: steps.sync.outputs.code == '0'
+        env:
+          GH_TOKEN: ${{ secrets.CASCADE_DISPATCH_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          pkg=$(node -p "require('./package.json').version")
+          for i in $(seq 1 10); do
+            sleep 15
+            if gh run list --repo "$GITHUB_REPOSITORY" --workflow=publish.yml \
+                 --limit 5 --json headBranch -q '.[].headBranch' | grep -qx "v${pkg}"; then
+              echo "publish.yml picked up v${pkg}"
+              exit 0
+            fi
+          done
+          echo "::error::Tagged v${pkg} but publish.yml never started."
+          echo "The checkout token cannot trigger workflows -- check CASCADE_DISPATCH_TOKEN."
+          exit 1
