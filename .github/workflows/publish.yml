@@ -97,3 +97,34 @@ jobs:
           set -euo pipefail
           npm publish --access public
           echo "Published $(node -p "require('./package.json').version"), carrying deka ${{ steps.rt.outputs.version }}"
+
+      # The last hop of the cascade: tell draftwriter a new compiler is
+      # available so it can ask for a release post.
+      #
+      # A separate step rather than a separate job because publishing is the
+      # last thing this workflow does -- if it succeeded, there is nothing
+      # after it that could invalidate the notification.
+      #
+      # Failure here is a warning, not an error. The package is published and
+      # correct; a draft that did not get requested is an inconvenience, and
+      # failing the publish over it would misrepresent what happened.
+      - name: Notify draftwriter
+        if: github.event.inputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.CASCADE_DISPATCH_TOKEN }}
+        run: |
+          set -euo pipefail
+          RUNTIME="${{ steps.rt.outputs.version }}"
+
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::warning::CASCADE_DISPATCH_TOKEN not set; draftwriter will not be asked for a post."
+            exit 0
+          fi
+
+          if gh api repos/dekaruntime/draftwriter/dispatches \
+               -f event_type=runtime-published \
+               -F "client_payload[tag]=v${RUNTIME}"; then
+            echo "asked draftwriter for a post covering v${RUNTIME}"
+          else
+            echo "::warning::could not notify draftwriter; request a draft by hand for v${RUNTIME}"
+          fi
