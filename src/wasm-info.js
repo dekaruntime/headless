@@ -11,11 +11,11 @@
 // When they differ, trust `sha256` -- it identifies the bytes unambiguously.
 
 export const bundledWasmInfo = Object.freeze({
-  manifestVersion: '0.32.1',
-  embeddedVersion: '0.32.1',
-  releaseVersion: '0.32.1',
-  sourceCommit: 'bf2b1a7993629e49bf43c429a80a6fd35368ee1d',
-  sha256: '03c0b256f511d2dd3e092b509e5ebae21a1f67460e6383c41d34cf9f4db8c0a9',
+  manifestVersion: '0.33.0',
+  embeddedVersion: '0.33.0',
+  releaseVersion: '0.33.0',
+  sourceCommit: 'd04c684c8ce141903a9d69563e9b50c56b5ebc82',
+  sha256: '8f9f3dbd45e8aa4ad98b8a123802453b232d050dae691d87556c232b2632d34c',
   target: 'wasm32-unknown-unknown',
   abiVersion: 1,
   syncedAt: '2026-08-25',

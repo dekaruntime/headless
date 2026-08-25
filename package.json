@@ -1,6 +1,6 @@
 {
   "name": "@dekaruntime/headless",
-  "version": "0.1.26",
+  "version": "0.1.27",
   "description": "Headless wasm-only deka compiler. Compile and run DekaScript from Node, browsers, and Cloudflare Workers.",
   "type": "module",
   "license": "MIT",
