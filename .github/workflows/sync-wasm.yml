@@ -119,15 +119,23 @@ jobs:
                exit 1 ;;
           esac
 
+      # NOTE the skip guard on this and the steps below.
+      #
+      # `steps.sync.outputs.code == '0'` alone is TRUE when the sync step was
+      # skipped: a skipped step's output is '', and GitHub's == coerces '' and
+      # '0' to the same number. So the guard fired exactly when nothing had
+      # been synced, and this job bumped, tagged and published on every hourly
+      # cron -- 16 npm versions for one unchanged compiler before it was
+      # noticed. Every run reported success.
       - name: Test against the new compiler
-        if: steps.sync.outputs.code == '0'
+        if: steps.check.outputs.skip == 'false' && steps.sync.outputs.code == '0'
         run: node --test test/*.test.mjs
 
       # A version bump is what makes stage three fire. Package semver is
       # independent of the runtime's (a wrapper fix needs somewhere to go); the
       # runtime it carries is recorded in the dist-tag at publish time.
       - name: Commit and tag
-        if: steps.sync.outputs.code == '0'
+        if: steps.check.outputs.skip == 'false' && steps.sync.outputs.code == '0'
         run: |
           set -euo pipefail
           git config user.name  "deka-bot"
@@ -146,7 +154,7 @@ jobs:
       # A tag that never publishes is the failure this job had for three
       # releases without going red. Fail loudly instead of trusting the trigger.
       - name: Confirm the publish actually fired
-        if: steps.sync.outputs.code == '0'
+        if: steps.check.outputs.skip == 'false' && steps.sync.outputs.code == '0'
         env:
           GH_TOKEN: ${{ secrets.CASCADE_DISPATCH_TOKEN || github.token }}
         run: |
